@@ -1,33 +1,49 @@
 import React from "react";
 import { useForm, SubmitHandler  } from "react-hook-form"
 import { useState } from "react";
+import { z } from "zod";
+import { zodResolver } from "@hookform/resolvers/zod";
 
+const ACCEPTED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/webp',
+]
 
 const MAX_FILE_SIZE = 1024 * 1024 * 2;
 
-enum OptionEnum {
-  option1 = "Категория 1",
-  option2 = "Категория 2",
-  option3 = "Категория 3",
-}
+const imageSchema = z.any().optional()
+  .refine(file => file.length == 1 ? ACCEPTED_IMAGE_TYPES.includes(file?.[0]?.type) ? true : false : true, 'Изображение должно быть формата JPEG или PNG.')
+  .refine(file => file.length == 1 ? file[0]?.size <= MAX_FILE_SIZE ? true : false : true, 'Размер изображения не должен превышать 2MB.')
 
-interface IFormInput {
-    firstName: string
-    lastName: string
-    email: string
-    category: OptionEnum
-    description: string
-    file_upload?: File | null
-}
+export const FormSchema = z.object({
+      firstName: z.string({message: "Данное поле обязательно к заполнению."}).min(3, { message: "Имя должно содержать не меньше 3 символов." }).max(30, { message: "Имя должно содержать не больше 30 символов." }),
+      lastName: z.string({message: "Данное поле обязательно к заполнению."}).min(3, { message: "Фамилия должна содержать не меньше 3 символов." }).max(30, { message: "Фамилия должна содержать не больше 30 символов." }),
+      email: z.string({message: "Данное поле обязательно к заполнению."}).email({ message: "E-Mail адрес введён неверно." }).regex(/^(?!\.)(?!.*\.\.)([a-z0-9_'+\-\.]*)[a-z0-9_'+\-]@([a-z0-9][a-z0-9\-]*\.)+[a-z]{2,}$/i),
+      category: z.enum([
+          "option1",
+          "option2",
+          "option3"
+        ], {
+      errorMap: () => ({ message: "Пожалуйста, выберете категорию." })
+      }),
+      description: z.string({message: "Данное поле обязательно к заполнению."}).min(10, { message: "Длина текста должна содержать не меньше 10 символов." }).max(500, { message: "Длина текста должна содержать не больше 800 символов." }),
+      file_upload: imageSchema.nullish(),
+})
+
+
+type IFormInput = z.infer<typeof FormSchema>;
 
 export default function App() {
   const { 
     register,
+    formState: { errors },
     formState, 
-    handleSubmit,
-    reset, 
-    setValue
-  } = useForm<IFormInput>({ mode: "onChange"})
+    handleSubmit, 
+    reset
+  } = useForm<IFormInput>({resolver: zodResolver(FormSchema), mode: "onChange"})
+
 
     const [file, setFile] = useState<any>();
 
@@ -37,10 +53,6 @@ export default function App() {
             return;
         }
 
-        if (e.target.files[0].size > MAX_FILE_SIZE ) {
-            alert("Размер изображения не должен превышать 2MB.");
-            return;
-        }
         setFile(e.target.files[0]);
     };
 
@@ -60,7 +72,7 @@ export default function App() {
             JSON.stringify(formData)
             console.log(formData)
 
-            // для последующей отправки формы на бекенд
+            // sending to backend
             try {
                 const endpoint = "http://localhost:8080/uploadfile/"
                 const response = await fetch(endpoint, {
@@ -99,46 +111,52 @@ export default function App() {
          <div className="contact-form__field">
             <label className="contact-form__label" htmlFor="firstName">Имя</label>
             <input className="contact-form__input" {...register("firstName")} id="firstName"
-                required
-                minLength={3}
-                maxLength={30}
             />
+            {errors.firstName && (
+                <p style={{ color: "red" }}>{errors.firstName.message}</p>
+            )}
         </div>
         
         <div className="contact-form__field">
             <label className="contact-form__label" htmlFor="lastName">Фамилия</label>
             <input className="contact-form__input" {...register("lastName")} id="firstName"
-                required
-                minLength={3}
-                maxLength={30}
             />
+            {errors.lastName && (
+                <p style={{ color: "red" }}>{errors.lastName.message}</p>
+            )}
         </div>
         
         <div className="contact-form__field">
             <label className="contact-form__label" htmlFor="email">E-Mail адрес</label>
             <input className="contact-form__input" type="email" {...register("email")} id="firstName"
-                required/>
+            />
+            {errors.email && (
+                <p style={{ color: "red" }}>{errors.email.message}</p>
+            )}
         </div>
 
          <div className="contact-form__field">
              <label className="contact-form__label" htmlFor="category">Пожалуйста, выберете категорию сообщения</label>
-             <select className="contact-form__select" {...register("category")} id="category" required>
+             <select className="contact-form__select" {...register("category")} id="category">
                  <option value="">Категория сообщения</option>
                  <option value="option1">Категория 1</option>
                  <option value="option2">Категория 2</option>
                  <option value="option3">Категория 3</option>
              </select>
+             {errors.category && (
+                <p style={{ color: "red" }}>{errors.category.message}</p>
+            )}
         </div>
 
         <div className="contact-form__field">
             <label className="contact-form__label" htmlFor="description">Ваше сообщение</label>
             <textarea className="contact-form__textarea" {...register("description")} id="description" rows={10}
-            required
-            minLength={10}
-            maxLength={800}
             />
+            {errors.description && (
+                <p style={{ color: "red" }}>{errors.description.message}</p>
+            )}
         </div> 
-
+         
         <div className="contact-form__input-field">
             <div className="contact-form__wrapper">
                 <label className="contact-form__label" htmlFor="input-file">Загрузить изображение</label> 
@@ -152,8 +170,6 @@ export default function App() {
                       <span className="contact-form__delete-button-text">Удалить изображение</span>
                   </button>
                 )}
-
-                
             </div>
 
             <input
@@ -161,16 +177,13 @@ export default function App() {
                 id="input-file"
                 className="contact-form__input-file"
                 style={{ opacity: 0 }}
-                accept="image/png, image/jpeg"
                 {...register("file_upload")}
-                onChange={onFileChange}
+                onChange={onFileChange}  
             />
 
-
         </div>
-        <div>
+        {errors.file_upload && <p style={{ color: "red" }}>{errors.file_upload?.message?.toString()}</p>}
 
-        </div>
         <button className="contact-form__submit" id="submitBtn">
             <span className="contact-form__submit-text">Отправить сообщение</span>
         </button>
